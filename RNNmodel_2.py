@@ -62,18 +62,10 @@ def forward_propagation(layer_num, neuron_list, weights_list, instance):
 
 def cost_function(layer_num, neuron_list, weights_list, ins, lambda_value):
     J = 0
-    y = []
-    y.append([ins[1]])
+    y = ins[1]
     output = forward_propagation(layer_num, neuron_list, weights_list, ins)
     weights_list = output[2]
-    cur_J = []
-    for j in range(len(output[0])):
-        cur_J.append([-y[j][0] * math.log(output[0][j][0]) - (1-y[j][0]) * math.log(1-output[0][j][0])])
-    sum_J = 0
-    for j in cur_J:
-        sum_J += j[0]
-    J += sum_J
-    #print("Cost, J , associated with instance: " + str(sum_J))
+    J = abs(y[0] - output[0][0][0])
     S = 0
     for layer in weights_list:
         for row in layer:
@@ -81,7 +73,6 @@ def cost_function(layer_num, neuron_list, weights_list, ins, lambda_value):
             for r in new_row:
                 S += r*r
     S *= (lambda_value / (2))
-    #print("Final (regularized) cost, J, based on the complete training set: " + str(J+S))
     return J+S
 
 def backpropagation(layer_num, neuron_list, weights_list, instance, lambda_value):
@@ -94,7 +85,7 @@ def backpropagation(layer_num, neuron_list, weights_list, instance, lambda_value
     y = []
     delta_list = []
     y.append([instance[1]])
-    delta = np.array(output) - np.array(y)
+    delta = np.array(output[0]) - np.array(y[0])
     delta_list.insert(0, delta)
     #print("delta: " + str(delta))
     for num in range(layer_num):
@@ -133,11 +124,65 @@ def backpropagation(layer_num, neuron_list, weights_list, instance, lambda_value
     else:
         backpropagation(layer_num, neuron_list, weights_list, instance, lambda_value)
 
-def run_rnn(trainingset, layer_num, neuron_list, lambda_value, weight_list = None):
+def cal_performance(predictions, testset, classes):
+    total_precision = 0
+    total_recall = 0
+    total_F1 = 0
+    total_accuracy = 0
+    for curclass in classes:
+        tp = 0
+        tn = 0
+        fp = 0
+        fn = 0
+        for i in range(len(predictions)):
+            actual = testset[i][1]
+            pred = predictions[i]
+            if pred == actual == curclass:
+                tp += 1
+            elif pred == curclass and actual != curclass:
+                fp += 1
+            elif pred != curclass and actual == curclass:
+                fn += 1
+            else:
+                tn += 1
+        accuracy = (tp + tn) / (tp + tn + fp + fn)
+        if (fp + fn) == 0:
+            precision = 1
+            recall = 1
+            F1 = 1
+        elif (tp + fp) == 0:
+            precision = tn / (tn + fn)
+            recall = tp / (tp + fn)
+        else:
+            precision = tp / (tp + fp)
+            recall = tp / (tp + fn)
+            F1 = 2 * ((precision * recall) / (precision + recall))
+        total_accuracy += accuracy
+        total_recall += recall
+        total_precision += precision
+        total_F1 += F1
+        #print("tp" + str(tp) + "tn" + str(tn) + "fp" + str(fp) + "fn" + str(fn))
+    class_num = len(classes)
+    total_accuracy = total_accuracy / class_num
+    total_precision = total_precision / class_num
+    total_recall = total_recall / class_num
+    total_F1 = total_F1 / class_num
+    return total_accuracy, total_precision, total_recall, total_F1
+
+def run_rnn(trainingset, layer_num, neuron_list, lambda_value, weight_list, testingset, classes):
     for instance in trainingset:
         weight_list = backpropagation(layer_num, neuron_list, weight_list, instance,lambda_value)
-    return weight_list
+    all_predictions = []
+    for j in testingset:
+        prediction = forward_propagation(layer_num, neuron_list, weight_list, j)[0]
+        all_predictions.append(prediction)
+    accuracy, precision, recall, F1 = cal_performance(all_predictions, testingset, classes)
+    return accuracy, precision, recall, F1, weight_list
 
 
 # trainingset = [   [[codestate_array1], [codestate_label1]] ,    [[codestate_array2], [codestate_label2]] ...    ]
 # testingset same as trainingset
+
+trainingset = [[[0, 0, 0, 1, 1, 1], [3]] ,    [[1, 1, 0, 1, 0, 1], [4]]]
+testingset = [[[0, 0, 1, 1, 1, 1], [4]] ,    [[1, 0, 0, 1, 0, 1], [3]]]
+print(run_rnn(trainingset, 3, [3, 8, 8], 0.25, None, testingset, [0, 1, 2, 3, 4, 5, 6]))

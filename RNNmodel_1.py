@@ -1,8 +1,3 @@
-#input: number of records * length of sequence * types of sequences
-#number of records = number of students for training
-#length of sequence = summation of max_code_states for each question
-#types of sequences = 1
-
 
 #using truncated back propagation through time(TBPTT)
 
@@ -11,9 +6,8 @@ import numpy as np
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
-def rnn_model(train_input_vectors, train_input_labels, test_input_vectors, test_input_labels, num_code_states, learning_rate = 0.0001, hidden_dim = 100, output_dim = 1, bptt_truncate = 5, min_clip_value = -10, max_clip_value = 10):
-    
-    weight_input_hidden = np.random.uniform(0, 1, (hidden_dim, num_code_states))    #ih
+def rnn_model(train_input_codestate_arrays, train_input_codestate_labels, test_input_codestate_arrays, test_input_codestate_labels, codestate_array_length, learning_rate = 0.0001, hidden_dim = 100, output_dim = 1, bptt_truncate = 5, min_clip_value = -10, max_clip_value = 10, nepoch = 25):
+    weight_input_hidden = np.random.uniform(0, 1, (hidden_dim, codestate_array_length))    #ih
     weight_hidden = np.random.uniform(0, 1, (hidden_dim, hidden_dim))   #hh
     weight_hidden_output = np.random.uniform(0, 1, (output_dim, hidden_dim))    #ho
 
@@ -23,25 +17,18 @@ def rnn_model(train_input_vectors, train_input_labels, test_input_vectors, test_
     test_data_label = []
 
     #for all training instances
-    for i in range(len(train_input_vectors)):   #each student
+    for i in range(len(train_input_codestate_arrays)):   #each codestate
         train_data_param.append([])
         train_data_label.append([])
-        for j in range(len(train_input_vectors[i])):    #each vector
-            if j == (len(train_input_vectors[i]) - 1):
-                train_data_param[i].append(train_input_vectors[i])
-            else:
-                train_data_param[i].append(train_input_vectors[i][:j+1])   #storing inputs: list of lists
-            train_data_label[i].append(train_input_labels[i][j])     #storing labels: list of lists
+        train_data_param[i].append(train_input_codestate_arrays[i])
+        train_data_label[i].append(train_input_codestate_labels[i])
+
     
     for i in range(len(test_input_vectors)):
         test_data_param.append([])
         test_data_label.append([])
-        for j in range(len(test_input_vectors[i])):
-            if j == (len(test_input_vectors[i]) - 1):
-                test_data_param[i].append(test_input_vectors[i])
-            else:
-                test_data_param[i].append(test_input_vectors[i][:j+1])
-            test_data_label[i].append(test_input_labels[i][j])
+        test_data_param[i].append(test_input_codestate_arrays[i])
+        test_data_label[i].append(test_input_codestate_labels[i])
 
 
     train_data_param = np.array(train_data_param)
@@ -57,46 +44,31 @@ def rnn_model(train_input_vectors, train_input_labels, test_input_vectors, test_
     test_data_label = np.expand_dims(test_data_label, axis = 1)
 
 
-    for i in range(len(train_data_label)):
+    for epoch in range(nepoch):
         loss = 0.0
-        for j in range(len(train_data_label[i])):
-            input, label = train_data_param[i][j], train_data_label[i][j]
-            prev_state = np.zeros((hidden_dim, 1))
-            for t in range(len(train_data_label[i])):
-                new_input = list(np.zeros(input.shape))
-                new_input[t] = input[t]
-                new_input = np.array(new_input)
-                mul_ih = np.dot(weight_input_hidden, new_input)
-                mul_hh = np.dot(weight_hidden, prev_state)
-                add = mul_ih + mul_hh
-                state = sigmoid(add)
-                mul_ho = np.dot(weight_hidden_output, state)
-                prev_state = state
+        for i in range(train_data_label.shape[0]):
+            input, label = train_data_param[i], train_data_label[i]
+            mul_ih = np.dot(weight_input_hidden, input)
+            state = sigmoid(mul_ih)
+            mul_ho = np.dot(weight_hidden_output, state)
             loss_per_record = (label - mul_ho)**2 / 2
             loss += loss_per_record
         loss = loss / float(label.shape[0])
 
         test_loss = 0.0
-        for j in range(len(test_data_label[i])):
-            input, label = test_data_param[i][j], test_data_label[i][j]
-            prev_state = np.zeros((hidden_dim, 1))
-            for t in range(len(test_data_label[i])):
-                new_input = np.zeros(input.shape)
-                new_input[t] = input[t]
-                mul_ih = np.dot(weight_input_hidden, new_input)
-                mul_hh = np.dot(weight_hidden, prev_state)
-                add = mul_ih + mul_hh
-                state = sigmoid(add)
-                mul_ho = np.dot(weight_hidden_output, state)
-                prev_state = state
+        for j in range(len(test_data_label.shape[0])):
+            input, label = test_data_param[i], test_data_label[i]
+            mul_ih = np.dot(weight_input_hidden, input)
+            state = sigmoid(mul_ih)
+            mul_ho = np.dot(weight_hidden_output, state)
             loss_per_record = (label - mul_ho)**2 / 2
-            test_loss += loss_per_record
+            loss += loss_per_record
         test_loss = test_loss / float(label.shape[0])
 
-        print('student: ', i + 1, ', Loss: ', loss, ', test_loss: ', test_loss)
+        print('Epoch: ', epoch + 1, ', Loss: ', loss, ', test Loss: ', test_loss)
 
-        for j in range(len(train_data_label[i])):
-            input, label = train_data_param[i][j], train_data_label[i][j]
+        for i in range(train_data_label.shape[0]):
+            input, label = train_data_param[i], train_data_label[i]
             prev_state = np.zeros((hidden_dim, 1))
             layers = []
             train_ih = np.zeros(weight_input_hidden.shape)
@@ -109,7 +81,7 @@ def rnn_model(train_input_vectors, train_input_labels, test_input_vectors, test_
             train_hh_i = np.zeros(weight_hidden.shape)
 
         #forward pass
-            for t in range(len(train_data_label[i])):
+            for t in range(codestate_array_length):
                 new_input = np.zeros(input.shape)
                 new_input[t] = input[t]
                 mul_ih = np.dot(weight_input_hidden, new_input)
